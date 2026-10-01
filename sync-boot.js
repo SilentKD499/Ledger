@@ -1,487 +1,227 @@
 // ============================================================
-//  sync-boot.js — Supabase cloud sync for Bhakta Mithai
-//  Drop this file next to index.html.
+//  sync-boot.js - Supabase cloud sync for Bhakta Mithai
+//  Loaded as a REGULAR script tag (no type="module" needed).
+//  Uses dynamic import() so it works in any browser.
 // ============================================================
 
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+(function () {
+  'use strict';
 
-// ====== STEP 1: PASTE YOUR SUPABASE CREDENTIALS HERE ======
-const SUPABASE_URL      = // ============================================================
-//  sync-boot.js — Supabase cloud sync for Bhakta Mithai
-//  Drop this file next to index.html.
-// ============================================================
+  // ====== STEP 1: PASTE YOUR SUPABASE CREDENTIALS HERE ======
+  var SUPABASE_URL = 'https://cfcizvsoxrhhfbdytihe.supabase.co/rest/v1/';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmY2l6dnNveHJoaGZiZHl0aWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjU5MjcsImV4cCI6MjEwNjQ0MTkyN30.ojR3qD9wNoZAV5lnsmoCUrHNmB1ZMybKX500FI6UXKg';
+  // ==========================================================
 
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-
-// ====== STEP 1: PASTE YOUR SUPABASE CREDENTIALS HERE ======
-const SUPABASE_URL      = 'https://cfcizvsoxrhhfbdytihe.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmY2l6dnNveHJoaGZiZHl0aWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjU5MjcsImV4cCI6MjEwNjQ0MTkyN30.ojR3qD9wNoZAV5lnsmoCUrHNmB1ZMybKX500FI6UXKg';
-// ===========================================================
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// ---------- UI references ----------
-const panel      = document.getElementById('syncPanel');
-const head       = document.getElementById('syncHead');
-const dot        = document.getElementById('syncDot');
-const label      = document.getElementById('syncLabel');
-const chev       = document.getElementById('syncChev');
-const signedOut  = document.getElementById('syncSignedOut');
-const signedIn   = document.getElementById('syncSignedIn');
-const emailInput = document.getElementById('syncEmail');
-const signInBtn  = document.getElementById('syncSignIn');
-const signOutBtn = document.getElementById('syncSignOut');
-const syncNowBtn = document.getElementById('syncNow');
-const userEl     = document.getElementById('syncUser');
-const msgEl      = document.getElementById('syncMsg');
-const msg2El     = document.getElementById('syncMsg2');
-
-let currentUser    = null;
-let isPushing      = false;
-let lastPushedHash = null;
-let lastPushedAt   = 0;
-
-// ---------- Helpers ----------
-function setStatus(state, text) {
-  dot.className = 'dot ' + state;
-  label.textContent = text;
-}
-
-function showMessage(el, text, isError) {
-  el.textContent = text;
-  el.className = isError ? 'err' : '';
-}
-
-function log() {
-  console.log('[sync]', ...arguments);
-}
-
-// ---------- Panel toggle ----------
-head.addEventListener('click', function () {
-  panel.classList.toggle('open');
-  chev.textContent = panel.classList.contains('open') ? '▴' : '▾';
-});
-
-// ---------- SIGN IN (magic link) ----------
-signInBtn.addEventListener('click', async function () {
-  const email = emailInput.value.trim();
-  if (!email) return showMessage(msgEl, 'Enter your email', true);
-  setStatus('busy', 'Sending link...');
-  const { error } = await supabase.auth.signInWithOtp({ email: email });
-  if (error) {
-    setStatus('err', 'Sign-in failed');
-    showMessage(msgEl, error.message, true);
-  } else {
-    setStatus('ok', 'Check your email');
-    showMessage(msgEl, 'Magic link sent! Check your inbox.');
-  }
-});
-
-// ---------- SIGN OUT ----------
-signOutBtn.addEventListener('click', async function () {
-  await supabase.auth.signOut();
-  currentUser = null;
-  lastPushedHash = null;
-  lastPushedAt = 0;
-  signedIn.hidden = true;
-  signedOut.hidden = false;
-  setStatus('', 'Sign in');
-});
-
-// ---------- AUTH STATE LISTENER ----------
-supabase.auth.onAuthStateChange(async function (event, session) {
-  if (session && session.user) {
-    currentUser = session.user;
-    userEl.textContent = currentUser.email;
-    signedIn.hidden = false;
-    signedOut.hidden = true;
-    setStatus('busy', 'Syncing...');
-    await initialSync();
-  } else {
-    currentUser = null;
-    signedIn.hidden = true;
-    signedOut.hidden = false;
-    setStatus('', 'Sign in');
-  }
-});
-
-// ---------- INITIAL SYNC (right after login) ----------
-// Compare local vs cloud, decide who wins, sync.
-async function initialSync() {
-  const { data, error } = await supabase
-    .from('ledger_data')
-    .select('data, updated_at')
-    .eq('user_id', currentUser.id)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Sync fetch error:', error);
-    setStatus('err', 'Sync error');
-    showMessage(msg2El, error.message, true);
-    return;
-  }
-
-  const localState = window.LedgerBridge.getState();
-  const localFYCount = Object.keys(localState.fyData || {}).length;
-  const localHasData = localFYCount > 0 &&
-    Object.values(localState.fyData).some(function (d) {
-      return d && ((d.sales && d.sales.length) || (d.expenses && d.expenses.length) ||
-                   (d.employees && d.employees.length));
+  // Load the Supabase library dynamically (no top-level import)
+  import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm')
+    .then(function (mod) {
+      startSync(mod.createClient(SUPABASE_URL, SUPABASE_ANON_KEY));
+    })
+    .catch(function (err) {
+      console.error('[sync] Failed to load Supabase library:', err);
     });
 
-  // Case 1: No cloud row yet → push local up
-  if (!data) {
-    log('No cloud data yet — pushing local up');
-    await pushData();
-    return;
-  }
+  function startSync(supabase) {
+    var panel      = document.getElementById('syncPanel');
+    var head       = document.getElementById('syncHead');
+    var dot        = document.getElementById('syncDot');
+    var label      = document.getElementById('syncLabel');
+    var chev       = document.getElementById('syncChev');
+    var signedOut  = document.getElementById('syncSignedOut');
+    var signedIn   = document.getElementById('syncSignedIn');
+    var emailInput = document.getElementById('syncEmail');
+    var signInBtn  = document.getElementById('syncSignIn');
+    var signOutBtn = document.getElementById('syncSignOut');
+    var syncNowBtn = document.getElementById('syncNow');
+    var userEl     = document.getElementById('syncUser');
+    var msgEl      = document.getElementById('syncMsg');
+    var msg2El     = document.getElementById('syncMsg2');
 
-  // Case 2: Local is empty → pull cloud down (new device first login)
-  if (!localHasData) {
-    log('Local empty — pulling cloud data');
-    window.LedgerBridge.setState(data.data);
-    lastPushedHash = JSON.stringify(data.data);
-    lastPushedAt = Date.now();
-    setStatus('ok', 'Synced from cloud');
-    showMessage(msg2El, 'Loaded cloud data');
-    return;
-  }
+    if (!panel) {
+      console.warn('[sync] Sync panel not in DOM. Skipping.');
+      return;
+    }
 
-  // Case 3: Both have data → ask user
-  const useCloud = window.confirm(
-    'Cloud backup found for ' + currentUser.email + '.\n\n' +
-    'Click OK to LOAD the cloud data (recommended if you just logged in on a new device).\n\n' +
-    'Click Cancel to OVERWRITE the cloud with this device\'s data.'
-  );
+    var currentUser = null;
+    var isPushing = false;
+    var lastPushedHash = null;
 
-  if (useCloud) {
-    window.LedgerBridge.setState(data.data);
-    lastPushedHash = JSON.stringify(data.data);
-    lastPushedAt = Date.now();
-    setStatus('ok', 'Loaded from cloud');
-    showMessage(msg2El, 'Loaded cloud data');
-  } else {
-    await pushData();
-  }
-}
+    function setStatus(s, text) {
+      dot.className = 'dot ' + s;
+      label.textContent = text;
+    }
 
-// ---------- PUSH to Supabase ----------
-async function pushData() {
-  if (!currentUser || isPushing) return;
-  isPushing = true;
-  setStatus('busy', 'Syncing...');
+    function showMessage(el, text, isError) {
+      if (!el) return;
+      el.textContent = text;
+      el.className = isError ? 'err' : '';
+    }
 
-  const state = window.LedgerBridge.getState();
-  const { error } = await supabase
-    .from('ledger_data')
-    .upsert(
-      {
-        user_id: currentUser.id,
-        data: state,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: 'user_id' }
-    );
-
-  if (error) {
-    console.error('Push error:', error);
-    setStatus('err', 'Sync error');
-    showMessage(msg2El, error.message, true);
-  } else {
-    lastPushedHash = JSON.stringify(state);
-    lastPushedAt = Date.now();
-    setStatus('ok', 'Synced');
-    showMessage(msg2El, 'Last sync: ' + new Date().toLocaleTimeString());
-  }
-  isPushing = false;
-}
-
-// ---------- PULL from Supabase ----------
-async function pullData() {
-  if (!currentUser) return;
-  const { data, error } = await supabase
-    .from('ledger_data')
-    .select('data')
-    .eq('user_id', currentUser.id)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Pull error:', error);
-    setStatus('err', 'Sync error');
-    return;
-  }
-
-  if (data && data.data) {
-    window.LedgerBridge.setState(data.data);
-    lastPushedHash = JSON.stringify(data.data);
-    lastPushedAt = Date.now();
-    setStatus('ok', 'Loaded from cloud');
-  }
-}
-
-// ---------- MANUAL SYNC BUTTON ----------
-syncNowBtn.addEventListener('click', async function () {
-  await pullData();
-  await pushData();
-});
-
-// ---------- AUTO-PUSH when local data changes ----------
-setInterval(function () {
-  if (!currentUser) return;
-  const currentHash = JSON.stringify(window.LedgerBridge.getState());
-  if (lastPushedHash === null) {
-    lastPushedHash = currentHash;
-    return;
-  }
-  if (currentHash !== lastPushedHash) {
-    pushData();
-  }
-}, 3000);
-
-// ---------- INITIAL SESSION CHECK ----------
-supabase.auth.getSession().then(function (res) {
-  const session = res.data.session;
-  if (session && session.user) {
-    currentUser = session.user;
-    userEl.textContent = currentUser.email;
-    signedIn.hidden = false;
-    signedOut.hidden = true;
-    setStatus('busy', 'Syncing...');
-    initialSync();
-  }
-});;
-const SUPABASE_ANON_KEY = 'PASTE_YOUR_ANON_KEY_HERE';
-// ===========================================================
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// ---------- UI references ----------
-const panel      = document.getElementById('syncPanel');
-const head       = document.getElementById('syncHead');
-const dot        = document.getElementById('syncDot');
-const label      = document.getElementById('syncLabel');
-const chev       = document.getElementById('syncChev');
-const signedOut  = document.getElementById('syncSignedOut');
-const signedIn   = document.getElementById('syncSignedIn');
-const emailInput = document.getElementById('syncEmail');
-const signInBtn  = document.getElementById('syncSignIn');
-const signOutBtn = document.getElementById('syncSignOut');
-const syncNowBtn = document.getElementById('syncNow');
-const userEl     = document.getElementById('syncUser');
-const msgEl      = document.getElementById('syncMsg');
-const msg2El     = document.getElementById('syncMsg2');
-
-let currentUser    = null;
-let isPushing      = false;
-let lastPushedHash = null;
-let lastPushedAt   = 0;
-
-// ---------- Helpers ----------
-function setStatus(state, text) {
-  dot.className = 'dot ' + state;
-  label.textContent = text;
-}
-
-function showMessage(el, text, isError) {
-  el.textContent = text;
-  el.className = isError ? 'err' : '';
-}
-
-function log() {
-  console.log('[sync]', ...arguments);
-}
-
-// ---------- Panel toggle ----------
-head.addEventListener('click', function () {
-  panel.classList.toggle('open');
-  chev.textContent = panel.classList.contains('open') ? '▴' : '▾';
-});
-
-// ---------- SIGN IN (magic link) ----------
-signInBtn.addEventListener('click', async function () {
-  const email = emailInput.value.trim();
-  if (!email) return showMessage(msgEl, 'Enter your email', true);
-  setStatus('busy', 'Sending link...');
-  const { error } = await supabase.auth.signInWithOtp({ email: email });
-  if (error) {
-    setStatus('err', 'Sign-in failed');
-    showMessage(msgEl, error.message, true);
-  } else {
-    setStatus('ok', 'Check your email');
-    showMessage(msgEl, 'Magic link sent! Check your inbox.');
-  }
-});
-
-// ---------- SIGN OUT ----------
-signOutBtn.addEventListener('click', async function () {
-  await supabase.auth.signOut();
-  currentUser = null;
-  lastPushedHash = null;
-  lastPushedAt = 0;
-  signedIn.hidden = true;
-  signedOut.hidden = false;
-  setStatus('', 'Sign in');
-});
-
-// ---------- AUTH STATE LISTENER ----------
-supabase.auth.onAuthStateChange(async function (event, session) {
-  if (session && session.user) {
-    currentUser = session.user;
-    userEl.textContent = currentUser.email;
-    signedIn.hidden = false;
-    signedOut.hidden = true;
-    setStatus('busy', 'Syncing...');
-    await initialSync();
-  } else {
-    currentUser = null;
-    signedIn.hidden = true;
-    signedOut.hidden = false;
-    setStatus('', 'Sign in');
-  }
-});
-
-// ---------- INITIAL SYNC (right after login) ----------
-// Compare local vs cloud, decide who wins, sync.
-async function initialSync() {
-  const { data, error } = await supabase
-    .from('ledger_data')
-    .select('data, updated_at')
-    .eq('user_id', currentUser.id)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Sync fetch error:', error);
-    setStatus('err', 'Sync error');
-    showMessage(msg2El, error.message, true);
-    return;
-  }
-
-  const localState = window.LedgerBridge.getState();
-  const localFYCount = Object.keys(localState.fyData || {}).length;
-  const localHasData = localFYCount > 0 &&
-    Object.values(localState.fyData).some(function (d) {
-      return d && ((d.sales && d.sales.length) || (d.expenses && d.expenses.length) ||
-                   (d.employees && d.employees.length));
+    head.addEventListener('click', function () {
+      panel.classList.toggle('open');
+      chev.textContent = panel.classList.contains('open') ? '^' : 'v';
     });
 
-  // Case 1: No cloud row yet → push local up
-  if (!data) {
-    log('No cloud data yet — pushing local up');
-    await pushData();
-    return;
+    // ----- Sign in -----
+    signInBtn.addEventListener('click', function () {
+      var email = emailInput.value.trim();
+      if (!email) { showMessage(msgEl, 'Enter your email', true); return; }
+      setStatus('busy', 'Sending link...');
+      supabase.auth.signInWithOtp({ email: email }).then(function (res) {
+        if (res.error) {
+          setStatus('err', 'Sign-in failed');
+          showMessage(msgEl, res.error.message, true);
+        } else {
+          setStatus('ok', 'Check your email');
+          showMessage(msgEl, 'Magic link sent! Check your inbox.');
+        }
+      });
+    });
+
+    // ----- Sign out -----
+    signOutBtn.addEventListener('click', function () {
+      supabase.auth.signOut().then(function () {
+        currentUser = null;
+        lastPushedHash = null;
+        signedIn.hidden = true;
+        signedOut.hidden = false;
+        setStatus('', 'Sign in');
+      });
+    });
+
+    // ----- Auth state -----
+    supabase.auth.onAuthStateChange(function (event, session) {
+      if (session && session.user) {
+        currentUser = session.user;
+        userEl.textContent = currentUser.email;
+        signedIn.hidden = false;
+        signedOut.hidden = true;
+        setStatus('busy', 'Syncing...');
+        initialSync();
+      } else {
+        currentUser = null;
+        signedIn.hidden = true;
+        signedOut.hidden = false;
+        setStatus('', 'Sign in');
+      }
+    });
+
+    // ----- Initial sync -----
+    function initialSync() {
+      supabase
+        .from('ledger_data')
+        .select('data, updated_at')
+        .eq('user_id', currentUser.id)
+        .maybeSingle()
+        .then(function (res) {
+          if (res.error) {
+            console.error('[sync] fetch error:', res.error);
+            setStatus('err', 'Sync error');
+            showMessage(msg2El, res.error.message, true);
+            return;
+          }
+          var localState = window.LedgerBridge.getState();
+          var hasLocal = Object.keys(localState.fyData || {}).length > 0;
+
+          if (!res.data) {
+            // No cloud row yet - push local up
+            return pushData();
+          }
+          if (!hasLocal) {
+            // Cloud exists, local empty - pull cloud down
+            window.LedgerBridge.setState(res.data.data);
+            lastPushedHash = JSON.stringify(res.data.data);
+            setStatus('ok', 'Loaded from cloud');
+            return;
+          }
+          // Both have data - ask user
+          var useCloud = window.confirm(
+            'Cloud backup found for ' + currentUser.email + '.\n\n' +
+            'Click OK to LOAD cloud data (recommended on a new device).\n' +
+            'Click Cancel to OVERWRITE cloud with this device\'s data.'
+          );
+          if (useCloud) {
+            window.LedgerBridge.setState(res.data.data);
+            lastPushedHash = JSON.stringify(res.data.data);
+            setStatus('ok', 'Loaded from cloud');
+          } else {
+            pushData();
+          }
+        });
+    }
+
+    // ----- Push -----
+    function pushData() {
+      if (!currentUser || isPushing) return;
+      isPushing = true;
+      setStatus('busy', 'Syncing...');
+      var state = window.LedgerBridge.getState();
+      supabase
+        .from('ledger_data')
+        .upsert({
+          user_id: currentUser.id,
+          data: state,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' })
+        .then(function (res) {
+          isPushing = false;
+          if (res.error) {
+            console.error('[sync] push error:', res.error);
+            setStatus('err', 'Sync error');
+            showMessage(msg2El, res.error.message, true);
+          } else {
+            lastPushedHash = JSON.stringify(state);
+            setStatus('ok', 'Synced');
+            showMessage(msg2El, 'Last sync: ' + new Date().toLocaleTimeString());
+          }
+        });
+    }
+
+    // ----- Pull -----
+    function pullData() {
+      if (!currentUser) return Promise.resolve();
+      return supabase
+        .from('ledger_data')
+        .select('data')
+        .eq('user_id', currentUser.id)
+        .maybeSingle()
+        .then(function (res) {
+          if (res.error) {
+            console.error('[sync] pull error:', res.error);
+            setStatus('err', 'Sync error');
+            return;
+          }
+          if (res.data && res.data.data) {
+            window.LedgerBridge.setState(res.data.data);
+            lastPushedHash = JSON.stringify(res.data.data);
+            setStatus('ok', 'Loaded from cloud');
+          }
+        });
+    }
+
+    syncNowBtn.addEventListener('click', function () {
+      pullData().then(function () { pushData(); });
+    });
+
+    // ----- Auto-push poll -----
+    setInterval(function () {
+      if (!currentUser) return;
+      var h = JSON.stringify(window.LedgerBridge.getState());
+      if (lastPushedHash === null) { lastPushedHash = h; return; }
+      if (h !== lastPushedHash) pushData();
+    }, 3000);
+
+    // ----- Resume existing session -----
+    supabase.auth.getSession().then(function (res) {
+      var session = res.data && res.data.session;
+      if (session && session.user) {
+        currentUser = session.user;
+        userEl.textContent = currentUser.email;
+        signedIn.hidden = false;
+        signedOut.hidden = true;
+        setStatus('busy', 'Syncing...');
+        initialSync();
+      }
+    });
   }
-
-  // Case 2: Local is empty → pull cloud down (new device first login)
-  if (!localHasData) {
-    log('Local empty — pulling cloud data');
-    window.LedgerBridge.setState(data.data);
-    lastPushedHash = JSON.stringify(data.data);
-    lastPushedAt = Date.now();
-    setStatus('ok', 'Synced from cloud');
-    showMessage(msg2El, 'Loaded cloud data');
-    return;
-  }
-
-  // Case 3: Both have data → ask user
-  const useCloud = window.confirm(
-    'Cloud backup found for ' + currentUser.email + '.\n\n' +
-    'Click OK to LOAD the cloud data (recommended if you just logged in on a new device).\n\n' +
-    'Click Cancel to OVERWRITE the cloud with this device\'s data.'
-  );
-
-  if (useCloud) {
-    window.LedgerBridge.setState(data.data);
-    lastPushedHash = JSON.stringify(data.data);
-    lastPushedAt = Date.now();
-    setStatus('ok', 'Loaded from cloud');
-    showMessage(msg2El, 'Loaded cloud data');
-  } else {
-    await pushData();
-  }
-}
-
-// ---------- PUSH to Supabase ----------
-async function pushData() {
-  if (!currentUser || isPushing) return;
-  isPushing = true;
-  setStatus('busy', 'Syncing...');
-
-  const state = window.LedgerBridge.getState();
-  const { error } = await supabase
-    .from('ledger_data')
-    .upsert(
-      {
-        user_id: currentUser.id,
-        data: state,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: 'user_id' }
-    );
-
-  if (error) {
-    console.error('Push error:', error);
-    setStatus('err', 'Sync error');
-    showMessage(msg2El, error.message, true);
-  } else {
-    lastPushedHash = JSON.stringify(state);
-    lastPushedAt = Date.now();
-    setStatus('ok', 'Synced');
-    showMessage(msg2El, 'Last sync: ' + new Date().toLocaleTimeString());
-  }
-  isPushing = false;
-}
-
-// ---------- PULL from Supabase ----------
-async function pullData() {
-  if (!currentUser) return;
-  const { data, error } = await supabase
-    .from('ledger_data')
-    .select('data')
-    .eq('user_id', currentUser.id)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Pull error:', error);
-    setStatus('err', 'Sync error');
-    return;
-  }
-
-  if (data && data.data) {
-    window.LedgerBridge.setState(data.data);
-    lastPushedHash = JSON.stringify(data.data);
-    lastPushedAt = Date.now();
-    setStatus('ok', 'Loaded from cloud');
-  }
-}
-
-// ---------- MANUAL SYNC BUTTON ----------
-syncNowBtn.addEventListener('click', async function () {
-  await pullData();
-  await pushData();
-});
-
-// ---------- AUTO-PUSH when local data changes ----------
-setInterval(function () {
-  if (!currentUser) return;
-  const currentHash = JSON.stringify(window.LedgerBridge.getState());
-  if (lastPushedHash === null) {
-    lastPushedHash = currentHash;
-    return;
-  }
-  if (currentHash !== lastPushedHash) {
-    pushData();
-  }
-}, 3000);
-
-// ---------- INITIAL SESSION CHECK ----------
-supabase.auth.getSession().then(function (res) {
-  const session = res.data.session;
-  if (session && session.user) {
-    currentUser = session.user;
-    userEl.textContent = currentUser.email;
-    signedIn.hidden = false;
-    signedOut.hidden = true;
-    setStatus('busy', 'Syncing...');
-    initialSync();
-  }
-});
+})();
