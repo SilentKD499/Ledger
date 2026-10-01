@@ -205,6 +205,31 @@ tr:hover td{background:#fdf9f2}
   .modal-overlay, .modal-sheet { background: none !important; box-shadow: none !important; }
 }
 </style>
+  <style>
+  #syncPanel {
+    position:fixed; right:16px; bottom:16px; width:300px; z-index:9999;
+    background:#181b22; border:1px solid #272b34; border-radius:14px;
+    box-shadow:0 12px 40px rgba(0,0,0,.5); font-size:13px; overflow:hidden;
+    color:#e8eaed;
+  }
+  #syncHead { display:flex; align-items:center; gap:9px; padding:11px 14px; cursor:pointer; user-select:none; }
+  #syncHead:hover { background:#1e222b; }
+  .dot { width:9px; height:9px; border-radius:50%; background:#8b93a1; flex:0 0 auto; transition:background .2s; }
+  .dot.ok   { background:#3ddc84;   box-shadow:0 0 8px #3ddc84; }
+  .dot.busy { background:#ffb020; box-shadow:0 0 8px #ffb020; }
+  .dot.err  { background:#ff5c5c;  box-shadow:0 0 8px #ff5c5c; }
+  #syncLabel { flex:1; font-weight:600; }
+  #syncChev { color:#8b93a1; font-size:11px; }
+  #syncBody { padding:0 14px 14px; display:none; }
+  #syncPanel.open #syncBody { display:block; }
+  #syncBody .row { margin-bottom:9px; }
+  #syncBody input { flex:1; min-width:0; background:#0e1014; border:1px solid #272b34; color:#e8eaed; padding:9px 11px; border-radius:8px; }
+  #syncBody button { width:100%; background:#4f8cff; color:#fff; border:0; padding:9px 14px; border-radius:8px; font-size:14px; cursor:pointer; font-weight:600; }
+  #syncBody button.ghost { background:transparent; border:1px solid #272b34; color:#e8eaed; font-weight:500; }
+  #syncUser { color:#8b93a1; font-size:12px; word-break:break-all; margin-bottom:9px; }
+  #syncMsg, #syncMsg2 { color:#8b93a1; font-size:12px; min-height:16px; margin-top:6px; }
+  #syncMsg.err, #syncMsg2.err { color:#ff5c5c; }
+</style>
 </head>
 <body>
 <div id="app">
@@ -786,6 +811,78 @@ const manifest={name:'Bhakta Mithai Accounts',short_name:'BM Accts',start_url:'.
 const mBlob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
 const mLink=document.createElement('link');mLink.rel='manifest';mLink.href=URL.createObjectURL(mBlob);document.head.appendChild(mLink);
 if('serviceWorker' in navigator){const sw=`const C='bhakta-v4';self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(['.']))));self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));`;navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw],{type:'application/javascript'}))).catch(()=>{});}
+// ==================== LEDGER BRIDGE FOR SUPABASE SYNC ====================
+// Exposes Bhakta Mithai's full state (config + every FY's data) so the
+// external sync module can read it and write merged data back.
+window.LedgerBridge = {
+  getState: function () {
+    const state = {
+      config: JSON.parse(JSON.stringify(appConfig)),
+      fyData: {}
+    };
+    // Include every FY that has data in localStorage
+    (appConfig.fyList || []).forEach(function (fy) {
+      const d = loadFYData(fy);
+      if (d) state.fyData[fy] = d;
+    });
+    // Always include the current in-memory FY (it may be newer than what's saved)
+    if (currentData && appConfig.currentFY) {
+      state.fyData[appConfig.currentFY] = JSON.parse(JSON.stringify(currentData));
+    }
+    return state;
+  },
+
+  setState: function (next) {
+    if (!next || typeof next !== 'object') return;
+    if (next.config) {
+      const keepFY = appConfig.currentFY;
+      const localList = appConfig.fyList || [];
+      Object.assign(appConfig, next.config);
+      const cloudList = next.config.fyList || [];
+      const all = Array.from(new Set(localList.concat(cloudList))).sort(function (a, b) { return b - a; });
+      appConfig.fyList = all;
+      if (all.indexOf(keepFY) === -1) appConfig.currentFY = all[0] || keepFY;
+    }
+    if (next.fyData) {
+      Object.keys(next.fyData).forEach(function (fy) {
+        saveFYData(parseInt(fy, 10), next.fyData[fy]);
+      });
+    }
+    saveAppConfig();
+    loadCurrentData();
+    if (currentData && currentData.employees && currentData.employees.length > 0) {
+      selectedEmployee = currentData.employees[0].name;
+    }
+    buildFYSelector();
+    render();
+  },
+
+  notify: function () { /* sync module polls getState() every few seconds */ }
+};
+
 </script>
+  <div id="syncPanel">
+  <div id="syncHead">
+    <span class="dot" id="syncDot"></span>
+    <span id="syncLabel">Sync</span>
+    <span id="syncChev">▾</span>
+  </div>
+  <div id="syncBody">
+    <div id="syncSignedOut">
+      <div class="row">
+        <input id="syncEmail" type="email" placeholder="you@email.com" autocomplete="email">
+      </div>
+      <button id="syncSignIn">Send magic link</button>
+      <div id="syncMsg"></div>
+    </div>
+    <div id="syncSignedIn" hidden>
+      <div id="syncUser"></div>
+      <div class="row"><button id="syncNow">Sync now</button></div>
+      <div class="row"><button id="syncSignOut" class="ghost">Sign out</button></div>
+      <div id="syncMsg2"></div>
+    </div>
+  </div>
+</div>
+<script type="module" src="./sync-boot.js"></script>
 </body>
 </html>
