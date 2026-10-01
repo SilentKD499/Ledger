@@ -8,7 +8,7 @@
   'use strict';
 
   // ====== STEP 1: PASTE YOUR SUPABASE CREDENTIALS HERE ======
-  var SUPABASE_URL = 'https://cfcizvsoxrhhfbdytihe.supabase.co/rest/v1/';
+  var SUPABASE_URL = 'https://cfcizvsoxrhhfbdytihe.supabase.co';
   var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmY2l6dnNveHJoaGZiZHl0aWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjU5MjcsImV4cCI6MjEwNjQ0MTkyN30.ojR3qD9wNoZAV5lnsmoCUrHNmB1ZMybKX500FI6UXKg';
   // ==========================================================
 
