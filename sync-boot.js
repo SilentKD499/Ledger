@@ -1,18 +1,20 @@
 // ============================================================
 //  sync-boot.js - Supabase cloud sync for Bhakta Mithai
-//  Loaded as a REGULAR script tag (no type="module" needed).
+//  Loaded as a REGULAR script tag (no type="module").
 //  Uses dynamic import() so it works in any browser.
 // ============================================================
 
 (function () {
   'use strict';
 
-  // ====== STEP 1: PASTE YOUR SUPABASE CREDENTIALS HERE ======
+  // ====== PASTE YOUR SUPABASE CREDENTIALS HERE ======
+  // Project URL only - NO trailing slash, NO /rest/v1
   var SUPABASE_URL = 'https://cfcizvsoxrhhfbdytihe.supabase.co';
+  // anon public key from Supabase dashboard → Settings → API
   var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmY2l6dnNveHJoaGZiZHl0aWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjU5MjcsImV4cCI6MjEwNjQ0MTkyN30.ojR3qD9wNoZAV5lnsmoCUrHNmB1ZMybKX500FI6UXKg';
-  // ==========================================================
+  // ==================================================
 
-  // Load the Supabase library dynamically (no top-level import)
+  // Load the Supabase library dynamically (avoids top-level import issues)
   import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm')
     .then(function (mod) {
       startSync(mod.createClient(SUPABASE_URL, SUPABASE_ANON_KEY));
@@ -57,12 +59,13 @@
       el.className = isError ? 'err' : '';
     }
 
+    // Panel open/close
     head.addEventListener('click', function () {
       panel.classList.toggle('open');
-      chev.textContent = panel.classList.contains('open') ? '^' : 'v';
+      chev.textContent = panel.classList.contains('open') ? '▴' : '▾';
     });
 
-    // ----- Sign in -----
+    // ----- Sign in (magic link) -----
     signInBtn.addEventListener('click', function () {
       var email = emailInput.value.trim();
       if (!email) { showMessage(msgEl, 'Enter your email', true); return; }
@@ -89,7 +92,7 @@
       });
     });
 
-    // ----- Auth state -----
+    // ----- Auth state change -----
     supabase.auth.onAuthStateChange(function (event, session) {
       if (session && session.user) {
         currentUser = session.user;
@@ -106,7 +109,7 @@
       }
     });
 
-    // ----- Initial sync -----
+    // ----- Initial sync after login -----
     function initialSync() {
       supabase
         .from('ledger_data')
@@ -121,24 +124,30 @@
             return;
           }
           var localState = window.LedgerBridge.getState();
-          var hasLocal = Object.keys(localState.fyData || {}).length > 0;
+          var hasLocal = Object.keys(localState.fyData || {}).length > 0 &&
+            Object.keys(localState.fyData).some(function (k) {
+              var d = localState.fyData[k];
+              return d && ((d.sales && d.sales.length) ||
+                           (d.expenses && d.expenses.length) ||
+                           (d.employees && d.employees.length));
+            });
 
+          // No cloud row → push local up
           if (!res.data) {
-            // No cloud row yet - push local up
             return pushData();
           }
+          // Cloud has data, local empty → pull cloud down
           if (!hasLocal) {
-            // Cloud exists, local empty - pull cloud down
             window.LedgerBridge.setState(res.data.data);
             lastPushedHash = JSON.stringify(res.data.data);
             setStatus('ok', 'Loaded from cloud');
             return;
           }
-          // Both have data - ask user
+          // Both have data → ask user
           var useCloud = window.confirm(
             'Cloud backup found for ' + currentUser.email + '.\n\n' +
-            'Click OK to LOAD cloud data (recommended on a new device).\n' +
-            'Click Cancel to OVERWRITE cloud with this device\'s data.'
+            'Click OK to LOAD the cloud data (recommended on a new device).\n' +
+            'Click Cancel to OVERWRITE the cloud with THIS device\'s data.'
           );
           if (useCloud) {
             window.LedgerBridge.setState(res.data.data);
@@ -150,7 +159,7 @@
         });
     }
 
-    // ----- Push -----
+    // ----- Push to Supabase -----
     function pushData() {
       if (!currentUser || isPushing) return;
       isPushing = true;
@@ -177,7 +186,7 @@
         });
     }
 
-    // ----- Pull -----
+    // ----- Pull from Supabase -----
     function pullData() {
       if (!currentUser) return Promise.resolve();
       return supabase
@@ -203,7 +212,7 @@
       pullData().then(function () { pushData(); });
     });
 
-    // ----- Auto-push poll -----
+    // ----- Auto-push poll every 3 seconds -----
     setInterval(function () {
       if (!currentUser) return;
       var h = JSON.stringify(window.LedgerBridge.getState());
@@ -211,7 +220,7 @@
       if (h !== lastPushedHash) pushData();
     }, 3000);
 
-    // ----- Resume existing session -----
+    // ----- Resume existing session on load -----
     supabase.auth.getSession().then(function (res) {
       var session = res.data && res.data.session;
       if (session && session.user) {
