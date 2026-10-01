@@ -8,13 +8,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>🪔 Bhakta Mithai</title>
-<!-- Load Google Identity Services for OAuth -->
-<script src="https://accounts.google.com/gsi/client"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
 <style>
-/* (same styles as before – omitted for brevity, but included in full file below) */
 :root{
   --bg:#f5efe4;--surface:#fffdf8;--surface2:#fdf7ec;
   --brand:#1a0800;--brand2:#2e1200;--brand3:#4a1e04;
@@ -205,31 +202,38 @@ tr:hover td{background:#fdf9f2}
   body { background: white; margin: 0; }
   .modal-overlay, .modal-sheet { background: none !important; box-shadow: none !important; }
 }
-</style>
-  <style>
-  #syncPanel {
-    position:fixed; right:16px; bottom:16px; width:300px; z-index:9999;
-    background:#181b22; border:1px solid #272b34; border-radius:14px;
-    box-shadow:0 12px 40px rgba(0,0,0,.5); font-size:13px; overflow:hidden;
-    color:#e8eaed;
-  }
-  #syncHead { display:flex; align-items:center; gap:9px; padding:11px 14px; cursor:pointer; user-select:none; }
-  #syncHead:hover { background:#1e222b; }
-  .dot { width:9px; height:9px; border-radius:50%; background:#8b93a1; flex:0 0 auto; transition:background .2s; }
-  .dot.ok   { background:#3ddc84;   box-shadow:0 0 8px #3ddc84; }
-  .dot.busy { background:#ffb020; box-shadow:0 0 8px #ffb020; }
-  .dot.err  { background:#ff5c5c;  box-shadow:0 0 8px #ff5c5c; }
-  #syncLabel { flex:1; font-weight:600; }
-  #syncChev { color:#8b93a1; font-size:11px; }
-  #syncBody { padding:0 14px 14px; display:none; }
-  #syncPanel.open #syncBody { display:block; }
-  #syncBody .row { margin-bottom:9px; }
-  #syncBody input { flex:1; min-width:0; background:#0e1014; border:1px solid #272b34; color:#e8eaed; padding:9px 11px; border-radius:8px; }
-  #syncBody button { width:100%; background:#4f8cff; color:#fff; border:0; padding:9px 14px; border-radius:8px; font-size:14px; cursor:pointer; font-weight:600; }
-  #syncBody button.ghost { background:transparent; border:1px solid #272b34; color:#e8eaed; font-weight:500; }
-  #syncUser { color:#8b93a1; font-size:12px; word-break:break-all; margin-bottom:9px; }
-  #syncMsg, #syncMsg2 { color:#8b93a1; font-size:12px; min-height:16px; margin-top:6px; }
-  #syncMsg.err, #syncMsg2.err { color:#ff5c5c; }
+/* ---------- Supabase sync panel ---------- */
+#syncPanel {
+  position:fixed; right:16px; bottom:80px; width:280px; z-index:9000;
+  background:#181b22; border:1px solid #272b34; border-radius:14px;
+  box-shadow:0 12px 40px rgba(0,0,0,.5); font-size:13px; overflow:hidden;
+  color:#e8eaed; font-family:system-ui,-apple-system,sans-serif;
+}
+#syncHead { display:flex; align-items:center; gap:9px; padding:11px 14px; cursor:pointer; user-select:none; }
+#syncHead:hover { background:#1e222b; }
+#syncDot { width:9px; height:9px; border-radius:50%; background:#8b93a1; flex:0 0 auto; transition:background .2s; }
+#syncDot.dot.ok   { background:#3ddc84;   box-shadow:0 0 8px #3ddc84; }
+#syncDot.dot.busy { background:#ffb020; box-shadow:0 0 8px #ffb020; }
+#syncDot.dot.err  { background:#ff5c5c;  box-shadow:0 0 8px #ff5c5c; }
+#syncLabel { flex:1; font-weight:600; }
+#syncChev { color:#8b93a1; font-size:11px; }
+#syncBody { padding:0 14px 14px; display:none; }
+#syncPanel.open #syncBody { display:block; }
+#syncBody .row { margin-bottom:9px; }
+#syncBody input {
+  width:100%; box-sizing:border-box;
+  background:#0e1014; border:1px solid #272b34; color:#e8eaed;
+  padding:9px 11px; border-radius:8px; font-size:14px;
+}
+#syncBody button {
+  width:100%; background:#4f8cff; color:#fff; border:0;
+  padding:9px 14px; border-radius:8px; font-size:14px;
+  cursor:pointer; font-weight:600; margin-bottom:6px;
+}
+#syncBody button.ghost { background:transparent; border:1px solid #272b34; color:#e8eaed; font-weight:500; }
+#syncUser { color:#8b93a1; font-size:12px; word-break:break-all; margin-bottom:9px; }
+#syncMsg, #syncMsg2 { color:#8b93a1; font-size:12px; min-height:16px; margin-top:6px; }
+#syncMsg.err, #syncMsg2.err { color:#ff5c5c; }
 </style>
 </head>
 <body>
@@ -252,6 +256,31 @@ tr:hover td{background:#fdf9f2}
 <div id="toast"></div>
 <div id="modal-container"></div>
 <div id="cal-modal-container"></div>
+
+<!-- Supabase sync panel -->
+<div id="syncPanel">
+  <div id="syncHead">
+    <span id="syncDot"></span>
+    <span id="syncLabel">Sync</span>
+    <span id="syncChev">▾</span>
+  </div>
+  <div id="syncBody">
+    <div id="syncSignedOut">
+      <div class="row">
+        <input id="syncEmail" type="email" placeholder="you@email.com" autocomplete="email">
+      </div>
+      <button id="syncSignIn">Send magic link</button>
+      <div id="syncMsg"></div>
+    </div>
+    <div id="syncSignedIn" hidden>
+      <div id="syncUser"></div>
+      <div class="row"><button id="syncNow">Sync now</button></div>
+      <div class="row"><button id="syncSignOut" class="ghost">Sign out</button></div>
+      <div id="syncMsg2"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── CONSTANTS ──────────────────────────────────────────────────────────────────
 const NM={1:'Baisakh',2:'Jestha',3:'Ashadh',4:'Shrawan',5:'Bhadra',6:'Ashwin',7:'Kartik',8:'Mangsir',9:'Poush',10:'Magh',11:'Falgun',12:'Chaitra'};
@@ -483,300 +512,9 @@ const PRINT_CSS=`body{background:#fff;margin:0}.receipt-print{background:#fff;co
 function printReceipt(){const content=document.getElementById('receipt-content');if(!content)return;const win=window.open('','_blank');if(!win){alert('This device blocked the print pop-up. Please allow pop-ups for this page and try again.');return;}win.document.write('<html><head><title>Receipt</title><style>'+PRINT_CSS+'</style></head><body>'+'<div class="receipt-print">'+content.innerHTML+'</div>'+'</body></html>');win.document.close();setTimeout(()=>{try{win.focus();win.print();}catch(e){}},250);}
 
 // ── MORE PAGE ──────────────────────────────────────────────────────────────────
-function renderMore(){const calc=calcFY(appConfig.currentFY);return`<div class="sec-hd">Reports & Tools</div><div class="more-grid">${[['📅','Calendar','Daily view','calendar'],['📊','Summary','Monthly table','summary'],['📉','P&L','Profit & Loss','profit'],['💰','Tax','Tax planning','tax'],['🔍','Audit','Health check','audit'],['🔮','Forecast','Next FY','forecast'],['🗂️','History','All years','history'],['🏦','Savings','Savings fund','savings'],['📤','Export','Data & settings','export'],['📦','Inventory','Stock management','inventory'],['💳','Payroll','Auto-run salary','payroll']].map(([ico,title,sub,page])=>`<div class="more-card" onclick="goTo('${page}')"><span class="mc-ico">${ico}</span><div class="mc-lbl">${title}</div><div class="mc-sub">${sub}</div></div>`).join('')}</div><div class="sec-hd">Quick Stats — ${getFYLabel(appConfig.currentFY)}</div><div class="kpi-grid wide"><div class="kpi"><div class="kpi-stripe" style="background:var(--blue)"></div><label>Total Sales</label><div class="kv ts">${fmt(calc.totalSales)}</div></div><div class="kpi"><div class="kpi-stripe" style="background:var(--red)"></div><label>Expenses</label><div class="kv td">${fmt(calc.totalExpenses)}</div></div><div class="kpi"><div class="kpi-stripe" style="background:var(--green)"></div><label>Net Profit</label><div class="kv ${calc.totalNet>=0?'ts':'td'}">${fmt(calc.totalNet)}</div></div><div class="kpi"><div class="kpi-stripe" style="background:var(--orange)"></div><label>Salary Paid</label><div class="kv tw2">${fmt(calc.totalSalary)}</div></div></div><div class="sec-hd">Cloud Backup</div><div class="card"><div class="card-bd">
-    ${driveToken 
-      ? `<div style="color:var(--green);font-weight:700">✅ Connected to Google Drive</div>
-         <div style="font-size:11px;color:var(--muted);margin-top:4px">Auto‑sync is active. Data is backed up to the "BhaktaMithai" folder.</div>
-         <button class="btn btn-s" onclick="syncWithDrive(true)" style="margin-top:8px">🔄 Sync Now</button>
-         <button class="btn btn-d btn-s" onclick="disconnectDrive()" style="margin-top:8px;margin-left:6px">🔌 Disconnect</button>`
-      : `<div style="color:var(--muted)">No cloud backup configured.</div>
-         <button class="btn btn-gold" onclick="connectDrive()" style="margin-top:8px">🔗 Connect to Google Drive</button>`
-    }
-  </div></div><div class="sec-hd">About</div><div class="card"><div class="card-bd" style="line-height:1.7;font-size:12px;color:var(--muted)"><div style="font-family:'Libre Baskerville',serif;font-size:16px;color:var(--text);font-weight:700;margin-bottom:6px">🪔 Bhakta Mithai — v4.0</div><div>Nepali BS Calendar 2075–2100 · Chart.js · localStorage · XLSX/JSON Export · Offline PWA · Google Drive Sync</div><div style="margin-top:6px">Data stored <b>locally on this device</b> and optionally backed up to your Google Drive.</div><div style="margin-top:6px;font-size:11px">Install as app: browser menu → "Add to Home Screen" (Android/iOS/PC)</div></div></div>`;}
+function renderMore(){const calc=calcFY(appConfig.currentFY);return`<div class="sec-hd">Reports & Tools</div><div class="more-grid">${[['📅','Calendar','Daily view','calendar'],['📊','Summary','Monthly table','summary'],['📉','P&L','Profit & Loss','profit'],['💰','Tax','Tax planning','tax'],['🔍','Audit','Health check','audit'],['🔮','Forecast','Next FY','forecast'],['🗂️','History','All years','history'],['🏦','Savings','Savings fund','savings'],['📤','Export','Data & settings','export'],['📦','Inventory','Stock management','inventory'],['💳','Payroll','Auto-run salary','payroll']].map(([ico,title,sub,page])=>`<div class="more-card" onclick="goTo('${page}')"><span class="mc-ico">${ico}</span><div class="mc-lbl">${title}</div><div class="mc-sub">${sub}</div></div>`).join('')}</div><div class="sec-hd">Quick Stats — ${getFYLabel(appConfig.currentFY)}</div><div class="kpi-grid wide"><div class="kpi"><div class="kpi-stripe" style="background:var(--blue)"></div><label>Total Sales</label><div class="kv ts">${fmt(calc.totalSales)}</div></div><div class="kpi"><div class="kpi-stripe" style="background:var(--red)"></div><label>Expenses</label><div class="kv td">${fmt(calc.totalExpenses)}</div></div><div class="kpi"><div class="kpi-stripe" style="background:var(--green)"></div><label>Net Profit</label><div class="kv ${calc.totalNet>=0?'ts':'td'}">${fmt(calc.totalNet)}</div></div><div class="kpi"><div class="kpi-stripe" style="background:var(--orange)"></div><label>Salary Paid</label><div class="kv tw2">${fmt(calc.totalSalary)}</div></div></div><div class="sec-hd">Cloud Backup</div><div class="card"><div class="card-bd"><div style="color:var(--muted);font-size:12px">Cloud sync is handled by the <b>Supabase panel</b> in the bottom-right corner. Tap it to sign in with your email and sync across devices.</div></div></div><div class="sec-hd">About</div><div class="card"><div class="card-bd" style="line-height:1.7;font-size:12px;color:var(--muted)"><div style="font-family:'Libre Baskerville',serif;font-size:16px;color:var(--text);font-weight:700;margin-bottom:6px">🪔 Bhakta Mithai — v4.0</div><div>Nepali BS Calendar 2075–2100 · Chart.js · localStorage · XLSX/JSON Export · Supabase Cloud Sync</div><div style="margin-top:6px">Data stored <b>locally on this device</b> and synced to <b>Supabase</b> when signed in.</div><div style="margin-top:6px;font-size:11px">Install as app: browser menu → "Add to Home Screen" (Android/iOS/PC)</div></div></div>`;}
 
-// ── GOOGLE DRIVE SYNC MODULE ─────────────────────────────────────────────────────
-// Replace with your own Client ID from Google Cloud Console
-const DRIVE_CLIENT_ID = '395817358171-7db2p5nl77du10hqtqbfkhk3g0qi66b2.apps.googleusercontent.com';
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-
-let driveToken = null;
-let driveFolderId = null;
-let syncTimeout = null;
-let isSyncing = false;
-
-// Load stored tokens / folder ID from localStorage
-function loadDriveState() {
-  driveToken = localStorage.getItem('drive_token') || null;
-  driveFolderId = localStorage.getItem('drive_folder_id') || null;
-}
-loadDriveState();
-// Drive sync disabled in favor of Supabase sync panel
-localStorage.removeItem('drive_token');
-localStorage.removeItem('drive_folder_id');
-driveToken = null;
-driveFolderId = null;
-
-// ── OAuth 2.0 (Implicit Flow using Google Identity Services) ──
-function connectToDrive() {
-  return new Promise((resolve, reject) => {
-    if (typeof google === 'undefined' || !google.accounts) {
-      reject('Google Identity Services not loaded. Check internet connection.');
-      return;
-    }
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: DRIVE_CLIENT_ID,
-      scope: DRIVE_SCOPE,
-      callback: (response) => {
-        if (response.error) {
-          reject(response.error);
-          return;
-        }
-        driveToken = response.access_token;
-        localStorage.setItem('drive_token', driveToken);
-        resolve(driveToken);
-      },
-    });
-    client.requestAccessToken();
-  });
-}
-
-function disconnectDrive() {
-  if (confirm('Disconnect Google Drive? Your local data stays safe.')) {
-    driveToken = null;
-    driveFolderId = null;
-    localStorage.removeItem('drive_token');
-    localStorage.removeItem('drive_folder_id');
-    showToast('🔌 Disconnected from Drive');
-    render();
-  }
-}
-
-// ── Ensure we have a valid token ──
-async function ensureDriveToken() {
-  if (driveToken) return driveToken;
-  // If no token, prompt user to connect
-  if (!confirm('Connect to Google Drive for cloud backup?')) throw new Error('User cancelled');
-  await connectToDrive();
-  return driveToken;
-}
-
-// ── Fetch wrapper: auto-refreshes an expired token and retries once ──
-async function driveApiFetch(url, options = {}) {
-  let res = await fetch(url, options);
-  if (res.status === 401) {
-    // Token expired or revoked — clear it and force a fresh sign-in, then retry once.
-    driveToken = null;
-    localStorage.removeItem('drive_token');
-    const freshToken = await connectToDrive();
-    const headers = { ...(options.headers || {}), Authorization: `Bearer ${freshToken}` };
-    res = await fetch(url, { ...options, headers });
-  }
-  return res;
-}
-
-// ── Find or create the app's folder ──
-async function ensureDriveFolder(token) {
-  if (driveFolderId) return driveFolderId;
-
-  const query = "name='BhaktaMithai' and mimeType='application/vnd.google-apps.folder' and trashed=false";
-  const res = await driveApiFetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&spaces=drive`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  const data = await res.json();
-  if (data.files && data.files.length > 0) {
-    driveFolderId = data.files[0].id;
-    localStorage.setItem('drive_folder_id', driveFolderId);
-    return driveFolderId;
-  }
-
-  // Create the folder
-  const folder = { name: 'BhaktaMithai', mimeType: 'application/vnd.google-apps.folder' };
-  const createRes = await driveApiFetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(folder),
-  });
-  const newFolder = await createRes.json();
-  driveFolderId = newFolder.id;
-  localStorage.setItem('drive_folder_id', driveFolderId);
-  return driveFolderId;
-}
-
-// ── Search for the FY file ──
-async function findFYFile(token, fy, folderId) {
-  const fileName = `FY_${fy}.json`;
-  const query = `name='${fileName}' and '${folderId}' in parents and trashed=false`;
-  const res = await driveApiFetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime)&spaces=drive`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  const data = await res.json();
-  return data.files && data.files.length > 0 ? data.files[0] : null;
-}
-
-// ── Upload data to Drive ──
-async function uploadToDrive(fy, data, token) {
-  const folderId = await ensureDriveFolder(token);
-  const file = await findFYFile(token, fy, folderId);
-  const fileName = `FY_${fy}.json`;
-
-  const metadata = {
-    name: fileName,
-    parents: [folderId],
-  };
-  const form = new FormData();
-  form.append(
-    'metadata',
-    new Blob([JSON.stringify(metadata)], { type: 'application/json' })
-  );
-  form.append(
-    'file',
-    new Blob([JSON.stringify(data)], { type: 'application/json' })
-  );
-
-  const url = file
-    ? `https://www.googleapis.com/upload/drive/v3/files/${file.id}?uploadType=multipart`
-    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
-  const method = file ? 'PATCH' : 'POST';
-
-  const res = await driveApiFetch(url, {
-    method,
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return await res.json();
-}
-
-// ── Download data from Drive ──
-async function downloadFromDrive(fy, token) {
-  const folderId = await ensureDriveFolder(token);
-  const file = await findFYFile(token, fy, folderId);
-  if (!file) return null;
-
-  const res = await driveApiFetch(
-    `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  return { data, modifiedTime: file.modifiedTime };
-}
-
-// ── Main SYNC function ──
-async function syncWithDrive(manual = false) {
-  if (isSyncing) return;
-  isSyncing = true;
-  try {
-    const token = await ensureDriveToken();
-    const fy = appConfig.currentFY;
-    const localData = currentData;
-
-    // Get cloud version
-    let cloud = null;
-    try {
-      cloud = await downloadFromDrive(fy, token);
-    } catch (e) {
-      // file may not exist yet
-    }
-
-    const localSyncTime = parseInt(localStorage.getItem('last_sync_time') || '0', 10);
-    const now = Date.now();
-
-    if (cloud) {
-      const cloudTime = new Date(cloud.modifiedTime).getTime();
-
-      // If cloud is newer than local last sync, load it
-      if (cloudTime > localSyncTime) {
-        // Confirm with user
-        const choice = confirm(
-          `Cloud data is newer (${new Date(cloudTime).toLocaleString()}).\nLoad it? (Yes = load cloud, No = overwrite cloud with your local data)`
-        );
-        if (choice) {
-          // Load cloud
-          currentData = cloud.data;
-          localStorage.setItem('last_sync_time', cloudTime);
-          saveFYData(fy, currentData); // save locally
-          loadCurrentData(); // re-initialise
-          render();
-          showToast('☁️ Synced from cloud');
-          return;
-        } else {
-          // Overwrite cloud with local
-          await uploadToDrive(fy, localData, token);
-          localStorage.setItem('last_sync_time', now);
-          showToast('☁️ Pushed local data to cloud');
-          return;
-        }
-      }
-    }
-
-    // No conflict – check if local has changes since last sync
-    if (localSyncTime < now - 5000) {
-      // Upload local to cloud
-      await uploadToDrive(fy, localData, token);
-      localStorage.setItem('last_sync_time', now);
-      if (manual) showToast('☁️ Synced with Drive');
-    } else if (manual) {
-      showToast('☁️ Already up to date');
-    }
-  } catch (err) {
-    console.warn('Sync failed:', err);
-    if (manual) alert('Sync failed: ' + (err && err.message ? err.message : err) + '\n\nYour data is still safe locally — try Sync Now again, or Disconnect and reconnect Drive if this keeps happening.');
-  } finally {
-    isSyncing = false;
-  }
-}
-
-// ── Wrapper to call sync on save ──
-function triggerSync() {
-  if (!driveToken) return; // user not connected yet
-  clearTimeout(syncTimeout);
-  syncTimeout = setTimeout(() => {
-    syncWithDrive().catch(console.warn);
-  }, 2000); // debounce 2s
-}
-
-// ── Periodic background sync ──
-function startBackgroundSync() {
-  setInterval(() => {
-    if (driveToken) {
-      syncWithDrive().catch(console.warn);
-    }
-  }, SYNC_INTERVAL_MS);
-}
-
-// ── Connect button – call this from a UI button ──
-async function connectDrive() {
-  try {
-    await connectToDrive();
-    await syncWithDrive();
-    showToast('✅ Connected to Drive');
-    render();
-  } catch (e) {
-    alert('Failed to connect: ' + e);
-  }
-}
-
-// ── Override saveData to trigger sync ──
-const originalSaveData = saveData;
-saveData = function() {
-  try {
-    originalSaveData();
-    if (driveToken) {
-      triggerSync();
-    }
-  } catch (e) {
-    // fallback
-  }
-};
-
-// ── SEED DATA (truncated for brevity – same as before) ──────────────────────
+// ── SEED DATA ─────────────────────────────────────────────────────────────────
 const _SEED={"appConfig":{"currentFY":2082,"fyList":[2081,2082],"growthRates":{"sales":5,"expenses":3},"vatThreshold":4000000,"festivalFactors":{},"vatableExpensePercent":50,"variableExpensePercent":50,"saleLabels":{"inside":"Outlet 1","outside":"Outlet 2","esewa":"Online"},"taxSlabs":[{"limit":500000,"rate":0.01},{"limit":200000,"rate":0.1},{"limit":300000,"rate":0.2},{"limit":1000000,"rate":0.3},{"limit":3000000,"rate":0.36},{"limit":SLAB_MAX,"rate":0.39}],"pin":"","itemCatalog":{},"customerPhones":{},"lastBackup":null,"memo":""},"fy_2081":{"employees":[],"categories":["Aalu","Chia","Gas","Khuwa","Khwapecha","Local","Material","Miscellaneous","Pepsi","Pustakari","Rent","Son Papdi","Spices","Thamel","Other"],"bonuses":{},"forecasts":{},"manualForecasts":{},"sales":[],"expenses":[],"advances":[],"savings":[],"savingsGoals":[],"carryOverBalance":0,"attendance":{},"customEvents":[],"unpaidLeaves":[],"inventory":[],"inventoryAdjustments":[]},"fy_2082":{"employees":[{"name":"Govinda Budathoki","salary":30000,"startDate":"2082-04-01","endDate":null,"status":"active","note":"","position":"Head Staff"},{"name":"Sagar Balami","salary":22000,"startDate":"2082-04-01","endDate":null,"status":"active","note":"","position":"2nd Incharge"},{"name":"Kancha Syangtan","salary":15000,"startDate":"2082-04-03","endDate":null,"status":"active","note":"","position":"Cook"},{"name":"Syante Syangtan","salary":12000,"startDate":"2082-04-07","endDate":null,"status":"active","note":" | on Hold","position":"All Rounder"},{"name":"Binod Budathoki","salary":10000,"startDate":"2082-07-23","endDate":null,"status":"active","note":" | On hold","position":"Chai Master"},{"name":"Sandesh Syangtan","position":"Helper","salary":10000,"startDate":"2082-11-26","endDate":"2083-01-25","status":"left","note":"","settlementPaid":37000,"settlementDate":"2083-01-25"},{"name":"Lhasang Syangtan","position":"Helper","salary":10000,"startDate":"2082-11-26","endDate":null,"status":"active","note":""}],"categories":["Aalu","Chia","Gas","Khuwa","Khwapecha","Local","Material","Miscellaneous","Pepsi","Pustakari","Rent","Son Papdi","Spices","Thamel","Other","Electicity"],"bonuses":{"Sagar Balami":{"2082-05":2000,"2082-07":2000},"Govinda Budathoki":{"2082-07":3500,"2082-05":3500},"Kancha Syangtan":{"2082-05":1500,"2082-07":1500},"Sandesh Syangtan":{"2082-11":0},"Binod Budathoki":{"2082-12":0}},"forecasts":{},"manualForecasts":{},"savings":[],"savingsGoals":[],"carryOverBalance":0,"sales":[],"expenses":[],"advances":[]}};
 
 (function seedIfFirst(){
@@ -803,14 +541,6 @@ loadCurrentData();
 if(currentData.employees?.length>0)selectedEmployee=currentData.employees[0].name;
 buildFYSelector();
 goTo('dashboard');
-
-// ── Start background sync after load ──
-if (driveToken) {
-  setTimeout(() => {
-    syncWithDrive().catch(console.warn);
-    startBackgroundSync();
-  }, 2000);
-}
 
 // ── PWA ────────────────────────────────────────────────────────────────────────
 const manifest={name:'Bhakta Mithai Accounts',short_name:'BM Accts',start_url:location.href.split('?')[0].split('#')[0],display:'standalone',background_color:'#1a0800',theme_color:'#1a0800',orientation:'portrait-primary',icons:[{src:`data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='24' fill='%231a0800'/><text x='96' y='128' font-size='110' text-anchor='middle'>🪔</text></svg>`,sizes:'192x192',type:'image/svg+xml'}]};
@@ -859,28 +589,8 @@ window.LedgerBridge = {
   notify: function () {}
 };
 </script>
-  <div id="syncPanel">
-  <div id="syncHead">
-    <span class="dot" id="syncDot"></span>
-    <span id="syncLabel">Sync</span>
-    <span id="syncChev">▾</span>
-  </div>
-  <div id="syncBody">
-    <div id="syncSignedOut">
-      <div class="row">
-        <input id="syncEmail" type="email" placeholder="you@email.com" autocomplete="email">
-      </div>
-      <button id="syncSignIn">Send magic link</button>
-      <div id="syncMsg"></div>
-    </div>
-    <div id="syncSignedIn" hidden>
-      <div id="syncUser"></div>
-      <div class="row"><button id="syncNow">Sync now</button></div>
-      <div class="row"><button id="syncSignOut" class="ghost">Sign out</button></div>
-      <div id="syncMsg2"></div>
-    </div>
-  </div>
-</div>
+
+<!-- Supabase sync module (loads after the app so LedgerBridge exists) -->
 <script src="./sync-boot.js"></script>
 </body>
 </html>
