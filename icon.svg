@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2e1200"/>
+      <stop offset="1" stop-color="#1a0800"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.6" r="0.55">
+      <stop offset="0" stop-color="#e8a420" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#e8a420" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <circle cx="256" cy="300" r="180" fill="url(#glow)"/>
+  <text x="256" y="340"
+        font-size="260"
+        text-anchor="middle"
+        font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">🪔</text>
+  <text x="256" y="456"
+        font-size="52"
+        text-anchor="middle"
+        font-family="'DM Sans','Segoe UI',sans-serif"
+        font-weight="700"
+        fill="#e8a420"
+        letter-spacing="2">BM</text>
+</svg>
