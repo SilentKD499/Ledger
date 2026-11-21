@@ -1,24 +1,23 @@
 // ============================================================
 //  sync-boot.js — Supabase cloud sync for Bhakta Mithai
 //  Uses the shared ledger_state row (id = 'main').
-//  Optimistic locking via ledger_state.version prevents
-//  the two admins from silently overwriting each other.
+//  Optimistic locking via ledger_state.version.
+//  cloudVersion = null  →  no cloud row yet (safe to INSERT)
+//  cloudVersion = 0..N  →  row exists (UPDATE guarded by version)
 // ============================================================
 
 (function () {
   'use strict';
 
-  // ====== Supabase credentials (project URL + anon key only) ======
   var SUPABASE_URL      = 'https://cfcizvsoxrhhfbdytihe.supabase.co';
   var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmY2l6dnNveHJoaGZiZHl0aWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjU5MjcsImV4cCI6MjEwNjQ0MTkyN30.ojR3qD9wNoZAV5lnsmoCUrHNmB1ZMybKX500FI6UXKg';
-  // ===============================================================
 
   import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm')
     .then(function (mod) { startSync(mod.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)); })
     .catch(function (err) { console.error('[sync] Failed to load Supabase:', err); });
 
   function startSync(supabase) {
-    var panel      = document.getElementById('syncPanel');
+    var panel = document.getElementById('syncPanel');
     if (!panel) { console.warn('[sync] Sync panel not in DOM. Skipping.'); return; }
 
     var head       = document.getElementById('syncHead');
@@ -35,21 +34,19 @@
     var msgEl      = document.getElementById('syncMsg');
     var msg2El     = document.getElementById('syncMsg2');
 
-    var currentUser     = null;
-    var isPushing       = false;
-    var lastPushedHash  = null;
-    var cloudVersion    = 0;   // ledger_state.version we last saw
+    var currentUser    = null;
+    var isPushing      = false;
+    var lastPushedHash = null;
+    var cloudVersion   = null;   // null = no row yet; >=0 = row exists at that version
 
     function setStatus(s, text) { dot.className = 'dot ' + s; label.textContent = text; }
     function showMsg(el, text, isError) { if (!el) return; el.textContent = text; el.className = isError ? 'err' : ''; }
 
-    // ---- Panel open / close ----
     head.addEventListener('click', function () {
       panel.classList.toggle('open');
       chev.textContent = panel.classList.contains('open') ? '▴' : '▾';
     });
 
-    // ---- Sign in (magic link) ----
     signInBtn.addEventListener('click', function () {
       var email = emailInput.value.trim();
       if (!email) { showMsg(msgEl, 'Enter your email', true); return; }
@@ -60,16 +57,14 @@
       });
     });
 
-    // ---- Sign out ----
     signOutBtn.addEventListener('click', function () {
       supabase.auth.signOut().then(function () {
-        currentUser = null; lastPushedHash = null; cloudVersion = 0;
+        currentUser = null; lastPushedHash = null; cloudVersion = null;
         signedIn.hidden = true; signedOut.hidden = false;
         setStatus('', 'Sign in');
       });
     });
 
-    // ---- Auth state ----
     supabase.auth.onAuthStateChange(function (event, session) {
       if (session && session.user) {
         currentUser = session.user;
@@ -84,9 +79,7 @@
       }
     });
 
-    // ============================================================
-    //  Helpers
-    // ============================================================
+    // ---- Helpers ----
     function fetchCloud() {
       return supabase.from('ledger_state').select('*').eq('id', 'main').maybeSingle();
     }
@@ -95,13 +88,20 @@
       if (!state || !state.fyData) return false;
       return Object.keys(state.fyData).some(function (k) {
         var d = state.fyData[k];
-        return d && ((d.sales && d.sales.length) || (d.expenses && d.expenses.length) || (d.employees && d.employees.length));
+        return d && ((d.sales && d.sales.length) ||
+                     (d.expenses && d.expenses.length) ||
+                     (d.employees && d.employees.length));
       });
     }
 
-    // ============================================================
-    //  Initial sync (after login)
-    // ============================================================
+    function isDuplicateKeyErr(err) {
+      if (!err) return false;
+      var code = err.code || '';
+      var msg  = (err.message || '').toLowerCase();
+      return code === '23505' || msg.indexOf('duplicate key') !== -1;
+    }
+
+    // ---- Initial sync after login ----
     function initialSync() {
       fetchCloud().then(function (res) {
         if (res.error) {
@@ -114,16 +114,17 @@
         var localState = window.LedgerBridge.getState();
         var hasLocal   = stateHasData(localState);
 
-        // Cloud row doesn't exist yet
+        // No row at all → mark as null and push
         if (!res.data) {
-          cloudVersion = 0;
+          cloudVersion = null;
           return pushData();
         }
 
-        cloudVersion = res.data.version || 0;
+        // Row exists → remember its version (may be 0)
+        cloudVersion = (res.data.version != null) ? res.data.version : 0;
+
         var hasCloud = stateHasData(res.data.data);
 
-        // Local empty, cloud has data → load
         if (!hasLocal) {
           window.LedgerBridge.setState(res.data.data);
           lastPushedHash = JSON.stringify(res.data.data);
@@ -131,16 +132,17 @@
           return;
         }
 
-        // Cloud empty, local has data → push
-        if (!hasCloud) { return pushData(); }
+        if (!hasCloud) {
+          // Row exists but is empty — safe to overwrite
+          return pushData();
+        }
 
-        // Both have data — ask user
         var when = res.data.updated_at ? new Date(res.data.updated_at).toLocaleString() : 'unknown';
         var useCloud = window.confirm(
           'Both this device and the cloud have data.\n\n' +
           'Cloud last updated: ' + when + '\n\n' +
-          'OK  = LOAD cloud data onto this device (safe, recommended on a new device)\n' +
-          'Cancel = OVERWRITE the cloud with this device\'s data (destructive — other admin\'s changes lost)'
+          'OK  = LOAD cloud data onto this device (safe)\n' +
+          'Cancel = OVERWRITE the cloud with this device\'s data (destructive)'
         );
 
         if (useCloud) {
@@ -153,9 +155,7 @@
       });
     }
 
-    // ============================================================
-    //  Push with optimistic lock (version check)
-    // ============================================================
+    // ---- Push (INSERT if no row, UPDATE guarded by version if row exists) ----
     function pushData() {
       if (!currentUser || isPushing) return;
       isPushing = true;
@@ -165,8 +165,8 @@
       var hash  = JSON.stringify(state);
       var op;
 
-      if (cloudVersion === 0) {
-        // First push — create the shared row
+      if (cloudVersion === null) {
+        // No row yet → INSERT with version 1
         op = supabase.from('ledger_state').insert({
           id: 'main',
           data: state,
@@ -175,7 +175,7 @@
           updated_by: currentUser.id
         }).select();
       } else {
-        // Update only if version matches (optimistic lock)
+        // Row exists → UPDATE only if version matches (optimistic lock)
         op = supabase.from('ledger_state').update({
           data: state,
           version: cloudVersion + 1,
@@ -187,6 +187,20 @@
       op.then(function (res) {
         isPushing = false;
 
+        // ---- Duplicate key race: another device just inserted the first row ----
+        if (res.error && isDuplicateKeyErr(res.error)) {
+          setStatus('busy', 'Racing first push — retrying...');
+          return fetchCloud().then(function (r) {
+            if (r.error || !r.data) {
+              setStatus('err', 'Conflict');
+              showMsg(msg2El, 'Retry failed. Tap Sync now.', true);
+              return;
+            }
+            cloudVersion = (r.data.version != null) ? r.data.version : 0;
+            pushData();
+          });
+        }
+
         if (res.error) {
           console.error('[sync] push error:', res.error);
           setStatus('err', 'Sync error');
@@ -194,7 +208,7 @@
           return;
         }
 
-        // Success — one row returned
+        // INSERT or UPDATE matched a row
         if (res.data && res.data.length > 0) {
           cloudVersion   = res.data[0].version;
           lastPushedHash = hash;
@@ -203,40 +217,33 @@
           return;
         }
 
-        // 0 rows → version conflict (someone else pushed)
+        // UPDATE returned 0 rows → someone else pushed first
         setStatus('busy', 'Conflict — pulling latest...');
         fetchCloud().then(function (r) {
           if (r.error || !r.data) {
             setStatus('err', 'Conflict');
-            showMsg(msg2El, 'Conflict could not be resolved. Try Sync now again.', true);
+            showMsg(msg2El, 'Could not resolve conflict. Try Sync now.', true);
             return;
           }
-
-          cloudVersion = r.data.version || 0;
-          var theirs = r.data.data;
-          var when   = r.data.updated_at ? new Date(r.data.updated_at).toLocaleString() : 'unknown';
-
+          cloudVersion = (r.data.version != null) ? r.data.version : 0;
+          var when = r.data.updated_at ? new Date(r.data.updated_at).toLocaleString() : 'unknown';
           var useTheirs = window.confirm(
             'Another admin updated the cloud at ' + when + '.\n\n' +
-            'OK  = LOAD their version (your recent changes on this device are discarded)\n' +
-            'Cancel = OVERWRITE with your current data (their changes lost)'
+            'OK  = LOAD their version (discards your recent changes)\n' +
+            'Cancel = OVERWRITE with your current data'
           );
-
           if (useTheirs) {
-            window.LedgerBridge.setState(theirs);
-            lastPushedHash = JSON.stringify(theirs);
+            window.LedgerBridge.setState(r.data.data);
+            lastPushedHash = JSON.stringify(r.data.data);
             setStatus('ok', 'Loaded latest');
           } else {
-            // Retry push with the fresh version
-            pushData();
+            pushData(); // retry with fresh version
           }
         });
       });
     }
 
-    // ============================================================
-    //  "Sync now" — pull if remote changed, otherwise push
-    // ============================================================
+    // ---- Sync now ----
     syncNowBtn.addEventListener('click', function () {
       if (!currentUser) return;
       setStatus('busy', 'Checking cloud...');
@@ -246,11 +253,12 @@
           showMsg(msg2El, res.error.message, true);
           return;
         }
-        // No cloud row yet → create it from local
-        if (!res.data) { return pushData(); }
-
-        // Cloud row exists and is newer → ask
-        if ((res.data.version || 0) > cloudVersion) {
+        if (!res.data) {
+          cloudVersion = null;
+          return pushData();
+        }
+        var fresh = (res.data.version != null) ? res.data.version : 0;
+        if (cloudVersion !== null && fresh > cloudVersion) {
           var when = res.data.updated_at ? new Date(res.data.updated_at).toLocaleString() : 'unknown';
           var load = window.confirm(
             'Cloud was updated by another admin at ' + when + '.\n\n' +
@@ -258,21 +266,19 @@
             'Cancel = OVERWRITE with your current data'
           );
           if (load) {
-            cloudVersion = res.data.version;
+            cloudVersion = fresh;
             window.LedgerBridge.setState(res.data.data);
             lastPushedHash = JSON.stringify(res.data.data);
             setStatus('ok', 'Loaded latest');
             return;
           }
         }
-        // Otherwise push local
+        cloudVersion = fresh;
         pushData();
       });
     });
 
-    // ============================================================
-    //  Auto-push poll — every 3 s, only if local state changed
-    // ============================================================
+    // ---- Auto-push poll ----
     setInterval(function () {
       if (!currentUser || isPushing) return;
       var h = JSON.stringify(window.LedgerBridge.getState());
@@ -280,9 +286,7 @@
       if (h !== lastPushedHash) pushData();
     }, 3000);
 
-    // ============================================================
-    //  Resume existing session on load
-    // ============================================================
+    // ---- Resume existing session ----
     supabase.auth.getSession().then(function (res) {
       var session = res.data && res.data.session;
       if (session && session.user) {
