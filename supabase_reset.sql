@@ -39,7 +39,7 @@ create policy "self check" on public.admins for select
 -- Register the two admin users (replace with your real emails)
 insert into public.admins (user_id)
 select id from auth.users
-where email in ('admin1@example.com','admin2@example.com')
+where email in ('sammali.sd@gmail.com','saman.dware15@gmail.com')
 on conflict do nothing;
 
 -- If the old per-user table still exists, drop it so it can't confuse anyone
